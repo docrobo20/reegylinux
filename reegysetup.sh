@@ -74,12 +74,8 @@ bind = SUPER, T, exec, sh -c "alacritty -e btop"
 bind = Super, E, exec, nautilus
 bind = Super, F, exec, firefox
 bind = Super, Return, exec, alacritty
-bind = SUPER SHIFT, E, exit
-bind = SUPER SHIFT, P, dpms, toggle
 bind = Alt, Return, fullscreen, 1 
 bind = SUPER, Q, killactive
-bind = SUPER, R, layoutmsg, togglesplit
-bind = SUPER SHIFT, F, fullscreen, 0
 bind = Super, W, togglefloating
 EOF
     echo "Custom binds injected into $DMS_BINDS"
