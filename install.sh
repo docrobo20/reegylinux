@@ -99,27 +99,29 @@ sudo pacman -S --noconfirm plasma-desktop dolphin konsole ly
 sudo systemctl enable ly@tty2.service
 sudo systemctl set-default graphical.target
 
-# --- 9. DMS Installer & Logic ---
-echo "Running DMS installer..."
+# --- 9. DMS Installer & Isolation (The Stable Way) ---
+echo "Installing DMS..."
 curl -fsSL https://install.danklinux.com | sh
 
-# 1. Enable the service so 'dms doctor' is happy
-systemctl --user enable dms
+# 1. We EXPLICITLY disable it. 
+# We don't care what the doctor says; we want isolation.
+systemctl --user disable --now dms 2>/dev/null
 
-# 2. Immediately stop the active service so it doesn't stay in KDE/current session
-systemctl --user stop dms 2>/dev/null
-
-# 3. Environment Variable Isolation (The standard logic we've refined)
+# 2. Environment Variable Migration
 DMS_ENV="$HOME/.config/environment.d/90-dms.conf"
 HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
+
 if [ -f "$DMS_ENV" ]; then
-    echo -e "\n# Isolated DMS Envs" >> "$HYPR_CONF"
+    echo -e "\n# Isolated DMS Environment Variables" >> "$HYPR_CONF"
+    # Cleaner injection: filter out comments and format for Hyprland
     grep -v '^#' "$DMS_ENV" | grep -v '^$' | sed 's/^/env = /' >> "$HYPR_CONF"
+    
+    # Nuke the global file to keep KDE clean
     rm "$DMS_ENV"
 fi
 
-# 4. The Trigger
-# We keep 'dms run' because it handles its own startup logic inside Hyprland
+# 3. Manual Startup Trigger
+# This is the only way DMS starts, and it only happens in Hyprland.
 echo "exec-once = dms run" >> "$HYPR_CONF"
 
 #--- 10. Custom Hyprland Injections ---
