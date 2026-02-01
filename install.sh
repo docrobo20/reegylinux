@@ -11,7 +11,7 @@ fi
 
 # Official Repo Packages
 MY_PACKAGES=(
-     "7zip" "proton-vpn-gtk-app" "discord" "spotify-launcher" "fastfetch" "fcitx5" "fcitx5-configtool" "fcitx5-mozc" "fzf" "nautilus" "noto-fonts" "noto-fonts-cjk" "qt6ct" "vlc" "mpv" "qbittorrent" "zsh-autosuggestions" "zsh-syntax-highlighting" "mpv" 
+     "7zip" "proton-vpn-gtk-app" "discord" "spotify-launcher" "fastfetch" "fcitx5" "fcitx5-configtool" "fcitx5-mozc" "fzf" "nautilus" "noto-fonts" "noto-fonts-cjk" "qt6ct" "vlc" "mpv" "qbittorrent" "zsh-autosuggestions" "zsh-syntax-highlighting" "mpv" "cava"
 )
 
 # AUR Packages
@@ -99,19 +99,20 @@ sudo pacman -S --noconfirm plasma-desktop dolphin konsole ly
 sudo systemctl enable ly@tty2.service
 sudo systemctl set-default graphical.target
 
-# --- 9. DMS Installer & Isolation ---
+# --- 9. DMS Installer & Isolation (Final Version) ---
 echo "Running DMS installer..."
 curl -fsSL https://install.danklinux.com | sh
-systemctl --user disable --now dms 2>/dev/null
+
+# Enable the service (without starting it) to satisfy dms doctor
+systemctl --user enable dms
 
 # Migrate DMS variables to Hyprland then delete the global file
 DMS_ENV="$HOME/.config/environment.d/90-dms.conf"
 HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
 if [ -f "$DMS_ENV" ]; then
-    echo "" >> "$HYPR_CONF"
-    while IFS='=' read -r key value; do
-        [[ ! -z "$key" ]] && echo "env = $key,$value" >> "$HYPR_CONF"
-    done < "$DMS_ENV"
+    echo -e "\n# Isolated DMS Envs" >> "$HYPR_CONF"
+    # Filter out comments and empty lines, then format for Hyprland
+    grep -v '^#' "$DMS_ENV" | grep -v '^$' | sed 's/^/env = /' >> "$HYPR_CONF"
     rm "$DMS_ENV"
 fi
 echo "exec-once = dms run" >> "$HYPR_CONF"
