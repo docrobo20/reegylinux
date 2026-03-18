@@ -74,7 +74,14 @@ Exec = /usr/bin/kbuildsycoca6 --noincremental
 EOF
 
 # --- 6. Environment & Display Manager ---
-sudo systemctl enable ly.service
+# Disable the standard getty on tty2 to clear the path
+sudo systemctl disable getty@tty2.service
+
+# Enable the Ly template service specifically for tty2
+sudo systemctl enable ly@tty2.service
+
+# Force the system to boot into the graphical target
+sudo systemctl set-default graphical.target
 sudo sed -i '/QT_QPA_PLATFORMTHEME/d' /etc/environment
 {
     echo "QT_QPA_PLATFORMTHEME=qt6ct"
