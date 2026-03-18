@@ -1,167 +1,102 @@
 #!/bin/bash
+# Reegylinux: Noctalia AUR Edition
+# Optimized for CachyOS + Hyprland + Dolphin
 
-# --- 1. Package Manifest ---
+set -e
 
-# Enable multilib if it's not already enabled
+# --- 1. Multilib & Initial Bootstrap ---
 if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
-    echo "Enabling multilib repository..."
+    echo "Enabling multilib..."
     echo -e "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist" | sudo tee -a /etc/pacman.conf
     sudo pacman -Sy
 fi
 
-# Official Repo Packages
-MY_PACKAGES=(
-     "7zip" "proton-vpn-gtk-app" "discord" "spotify-launcher" "fastfetch" "fcitx5" "fcitx5-configtool" "fcitx5-mozc" "fzf" "nautilus" "noto-fonts" "noto-fonts-cjk" "qt6ct" "vlc" "mpv" "qbittorrent" "zsh-autosuggestions" "zsh-syntax-highlighting" "mpv" "cava" "wl-clipboard"
-)
-
-# AUR Packages
-MY_AUR_PACKAGES=(
-    "anki-bin"
-)
-
-# --- 2. Bootstrap & System Optimization ---
-echo "Bootstrapping build essentials..."
 sudo pacman -S --needed --noconfirm base-devel git zsh
 
-THREADS=$(nproc)
-if [ -f /etc/makepkg.conf ]; then
-    sudo sed -i "s/#MAKEFLAGS=\"-j2\"/MAKEFLAGS=\"-j$THREADS\"/" /etc/makepkg.conf
-    echo "Optimized makepkg for $THREADS cores."
+# --- 2. Install Yay (AUR Helper) ---
+if ! command -v yay &> /dev/null; then
+    echo "Installing Yay..."
+    git clone https://aur.archlinux.org/yay.git /tmp/yay
+    cd /tmp/yay && makepkg -si --noconfirm && cd ~
 fi
 
-# --- 3. Install Official Packages ---
-echo "Installing main application suite..."
-sudo pacman -S --noconfirm "${MY_PACKAGES[@]}"
+# --- 3. The Package Manifest ---
+# Note: Installing 'noctalia-git' handles most dependencies automatically
+MY_PACKAGES=(
+    "7zip" "proton-vpn-gtk-app" "discord" "spotify-launcher" "fastfetch" 
+    "fzf" "noto-fonts" "noto-fonts-cjk" "qt6ct" "vlc" "mpv" "qbittorrent" 
+    "zsh-autosuggestions" "zsh-syntax-highlighting" "cava" "wl-clipboard"
+    "fcitx5" "fcitx5-configtool" "fcitx5-mozc" "fcitx5-gtk" "fcitx5-qt"
+    "hyprland" "ly" "swww" "grim" "slurp"
+    "dolphin" "konsole" "kio-extras" "kservice" "ark" "kvantum" "nwg-look"
+    "ghostty" "networkmanager" "pavucontrol" "bluez" "blueman"
+)
 
-# --- 4. Personal Repo Setup ---
-echo "Cloning reegylinux repository..."
-# REPLACE the URL below with your actual repo
-git clone https://github.com/docrobo20/reegylinux.git ~/reegylinux
+MY_AUR_PACKAGES=(
+    "anki-bin"
+    "noctalia-git" # This is the star of the show
+)
 
-# --- 5. Config Folder Imports (Symlinks) ---
-echo "Setting up configuration symlinks..."
+echo "--- Installing Official & AUR Packages ---"
+sudo pacman -S --needed --noconfirm "${MY_PACKAGES[@]}"
+yay -S --noconfirm "${MY_AUR_PACKAGES[@]}"
+
+# --- 4. Personal Repo & Shell Setup ---
+echo "Syncing reegylinux repository..."
+[ -d "$HOME/reegylinux" ] || git clone https://github.com/docrobo20/reegylinux.git ~/reegylinux
+
+# Symlinks for non-DE apps
 mkdir -p ~/.config
 [ -d "$HOME/reegylinux/mpv" ] && ln -sfn ~/reegylinux/mpv ~/.config/mpv
 [ -d "$HOME/reegylinux/fastfetch" ] && ln -sfn ~/reegylinux/fastfetch ~/.config/fastfetch
 
-# --- 5b. Wallpaper Repository Integration ---
-echo "Importing personal wallpaper collection..."
-
-# 1. Create the standard Pictures directory if it doesn't exist
-mkdir -p ~/Pictures
-
-# 2. Symlink your repo's wallpaper folder to your home directory
-# This assumes your folder in the repo is named 'wallpapers'
-if [ -d "$HOME/reegylinux/wallpapers" ]; then
-    ln -sfn "$HOME/reegylinux/wallpapers" "$HOME/Pictures/Wallpapers"
-    echo "Personal wallpapers linked to ~/Pictures/Wallpapers"
-else
-    echo "Warning: 'wallpapers' folder not found in reegylinux repo. Skipping symlink."
-fi
-
-# --- 6. AUR Helper & Zsh Plugins ---
-echo "Installing Yay and AUR manifest..."
-git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm && cd .. && rm -rf yay
-yay -S --noconfirm "${MY_AUR_PACKAGES[@]}"
-
-# --- 7. Zsh & Oh My Zsh Integration ---
-echo "Configuring Zsh..."
-
-# 1. Install OMZ (Unattended)
+# Oh My Zsh & .zshrc
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 fi
+[ -f "$HOME/reegylinux/.zshrc" ] && ln -sf "$HOME/reegylinux/.zshrc" "$HOME/.zshrc"
+sudo chsh -s $(which zsh) $USER
 
-# 2. The Symlink Bridge (Fixes the 'Not Found' error for Pacman plugins)
-ZSH_CUSTOM="$HOME/.oh-my-zsh/custom/plugins"
-mkdir -p "$ZSH_CUSTOM"
-ln -sfn /usr/share/zsh/plugins/zsh-autosuggestions "$ZSH_CUSTOM/zsh-autosuggestions"
-ln -sfn /usr/share/zsh/plugins/zsh-syntax-highlighting "$ZSH_CUSTOM/zsh-syntax-highlighting"
+# --- 5. Dolphin & System Integration ---
+# Ensure "Open With" works in a standalone WM
+sudo mkdir -p /etc/pacman.d/hooks
+cat <<EOF | sudo tee /etc/pacman.d/hooks/refresh-kservice.hook
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+[Action]
+Description = Updating KDE Service Cache...
+When = PostTransaction
+Exec = /usr/bin/kbuildsycoca6 --noincremental
+EOF
 
-# 3. Whitelist Shell
-ZSH_BIN=$(which zsh)
-grep -q "$ZSH_BIN" /etc/shells || echo "$ZSH_BIN" | sudo tee -a /etc/shells
+# --- 6. Environment & Display Manager ---
+sudo systemctl enable ly.service
+sudo sed -i '/QT_QPA_PLATFORMTHEME/d' /etc/environment
+{
+    echo "QT_QPA_PLATFORMTHEME=qt6ct"
+    echo "XDG_CURRENT_DESKTOP=Hyprland"
+    echo "XDG_SESSION_TYPE=wayland"
+} | sudo tee -a /etc/environment
 
-# 4. Deploy .zshrc
-rm -f "$HOME/.zshrc"
-if [ -f "$HOME/reegylinux/.zshrc" ]; then
-    ln -sf "$HOME/reegylinux/.zshrc" "$HOME/.zshrc"
-else
-    touch "$HOME/.zshrc"
-fi
-
-# 5. Switch Shell
-sudo chsh -s "$ZSH_BIN" $USER
-
-# --- 8. Desktop & Greeter ---
-echo "Installing KDE Plasma and Ly..."
-sudo pacman -S --noconfirm plasma-desktop dolphin konsole ly
-sudo systemctl enable ly@tty2.service
-sudo systemctl set-default graphical.target
-
-# --- 9. DMS Installer & Isolation (The Stable Way) ---
-echo "Installing DMS..."
-curl -fsSL https://install.danklinux.com | sh
-
-# 1. We EXPLICITLY disable it. 
-# We don't care what the doctor says; we want isolation.
-systemctl --user disable --now dms 2>/dev/null
-
-# 2. Environment Variable Migration
-DMS_ENV="$HOME/.config/environment.d/90-dms.conf"
+# --- 7. Final Hyprland Config ---
+# Noctalia installed via AUR usually places its config in ~/.config/noctalia
+# or uses a system-wide binary 'noctalia'
+mkdir -p ~/.config/hypr
 HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
 
-if [ -f "$DMS_ENV" ]; then
-    echo -e "\n# Isolated DMS Environment Variables" >> "$HYPR_CONF"
-    # Cleaner injection: filter out comments and format for Hyprland
-    grep -v '^#' "$DMS_ENV" | grep -v '^$' | sed 's/^/env = /' >> "$HYPR_CONF"
-    
-    # Nuke the global file to keep KDE clean
-    rm "$DMS_ENV"
-fi
-
-# 3. Manual Startup Trigger
-# This is the only way DMS starts, and it only happens in Hyprland.
-echo "exec-once = dms run" >> "$HYPR_CONF"
-
-#--- 10. Custom Hyprland Injections ---
-echo "Injecting custom Hyprland settings..."
-
-# 10a. Fcitx5 & Workspaces
 cat <<EOF >> "$HYPR_CONF"
-
-# --- JAPANESE INPUT (FCITX5) ---
-exec-once = fcitx5 -d
-
-# --- REEGY WORKSPACE RULES ---
-workspace=1,monitor:HDMI-A-1
-workspace=2,monitor:DP-1
-workspace=3,monitor:DP-1
-workspace=4,monitor:DP-1
-workspace=5,monitor:DP-1
-EOF
-
-# 10b. Custom Binds to DMS folder
-DMS_BINDS="$HOME/.config/hypr/dms/binds.conf"
-mkdir -p "$(dirname "$DMS_BINDS")"
-cat <<EOF >> "$DMS_BINDS"
+# --- NOCTALIA STARTUP ---
+exec-once = noctalia # Launched as a binary when installed via AUR
 
 # --- REEGY CUSTOM BINDS ---
-bind = SUPER, T, exec, alacritty -e btop
-bind = Super, E, exec, nautilus
-bind = Super, F, exec, firefox
-bind = Super, Return, exec, alacritty
-bind = Alt, Return, fullscreen, 1 
-bind = SUPER, Q, killactive
-bind = Super, W, togglefloating
+exec-once = fcitx5 -d
+bind = SUPER, T, exec, ghostty -e btop
+bind = Super, E, exec, dolphin
+bind = Super, Return, exec, ghostty
 EOF
 
-# --- 11. VM Tweaks & Final Cleanup ---
-if hostnamectl status | grep -q "virtualization"; then
-    echo "Applying VM cursor fixes..."
-    echo "env = WLR_NO_HARDWARE_CURSORS,1" >> "$HYPR_CONF"
-    echo "env = WLR_RENDERER_ALLOW_SOFTWARE,1" >> "$HYPR_CONF"
-fi
-
-sudo pacman -Sc --noconfirm
-echo "Deployment Complete! You can now reboot."
+echo "Deployment Complete! Reboot to start your new system."
